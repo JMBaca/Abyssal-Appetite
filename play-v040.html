@@ -1,0 +1,1122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#071b30">
+<title>Abyssal Appetite — prototype 0.4.0</title>
+<style>
+*{box-sizing:border-box}
+html,body{overscroll-behavior:none;user-select:none;-webkit-user-select:none;margin:0;width:100%;height:100%;overflow:hidden;background:#071b30;color:#eefaff;font-family:system-ui,sans-serif;touch-action:none}
+#game{position:relative;width:100%;height:100%;min-height:300px;overflow:hidden;background:#092a40}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+
+/* HUD */
+.hud{position:absolute;left:max(14px,env(safe-area-inset-left));right:max(14px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));display:flex;justify-content:space-between;align-items:flex-start;gap:10px;pointer-events:none;text-shadow:0 1px 3px #0008}
+.stats{width:min(44%,210px);display:grid;gap:6px}
+.bar{height:9px;background:#001a2a99;border:1px solid #a6dcea33;border-radius:8px;overflow:hidden}
+.bar i{display:block;height:100%;width:100%;background:#77e6b7;transition:none}
+.bar.hunger i{background:#ffc471}
+.bar.xp i{background:#8fc9ff}
+.bar.low i{animation:lowpulse .55s ease-in-out infinite alternate}
+@keyframes lowpulse{from{opacity:1}to{opacity:.3}}
+.statline{display:flex;justify-content:space-between;font-size:10px;font-weight:800;letter-spacing:.08em}
+.score{text-align:right;font-weight:900;font-size:23px;line-height:1}
+.score small{display:block;font-size:10px;letter-spacing:.12em;color:#bce9f1;margin-bottom:4px}
+.score .size{font-size:11px;font-weight:700;line-height:1.5;color:#bce9f1}
+.score .depth{font-size:10px;font-weight:800;letter-spacing:.08em;line-height:1.5;color:#8fd9e6}
+.score .combo{font-size:12px;font-weight:900;letter-spacing:.06em;color:#ffd27a;line-height:1.5}
+.mutations{font-size:10px;color:#a3eed4;max-width:210px;margin-left:auto;text-align:right;line-height:1.4;font-weight:600}
+
+.bottom{position:absolute;bottom:max(13px,env(safe-area-inset-bottom));left:max(14px,env(safe-area-inset-left));right:max(14px,env(safe-area-inset-right));display:flex;justify-content:space-between;align-items:flex-end;pointer-events:none}
+.left{max-width:62%}
+.tools{display:flex;gap:8px;margin-bottom:8px;pointer-events:auto}
+.tool{width:36px;height:36px;padding:0;border-radius:11px;border:1px solid #a8edff55;background:#0b375a99;color:#eefaff;font-weight:900;font-size:13px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:none;appearance:none;-webkit-appearance:none}
+.tool.off{opacity:.45;text-decoration:line-through}
+.hint{font-size:11px;color:#d0f0f6b8;line-height:1.3;transition:opacity .9s}
+.hint.fade{opacity:0}
+/* The boost control is drawn on the canvas; this transparent button only captures input. */
+.boost{pointer-events:auto;touch-action:none;border:1px solid #a8edff80;border-radius:50%;width:68px;height:68px;background:#0b375aab;color:white;font-weight:900;cursor:pointer;opacity:0;-webkit-tap-highlight-color:transparent;appearance:none;-webkit-appearance:none;outline:none;transform:none;transition:none}
+
+.toast{position:absolute;top:28%;left:50%;transform:translateX(-50%);font-size:19px;font-weight:900;letter-spacing:.08em;text-shadow:0 2px 8px #002632;pointer-events:none;white-space:nowrap;color:#c7ffe0}
+
+/* Menus */
+.veil{position:absolute;inset:0;display:flex;justify-content:center;align-items:center;background:linear-gradient(135deg,#031323c9,#0b354b80);padding:18px;z-index:4}
+.panel{text-align:center;max-width:390px;width:100%;max-height:100%;overflow:auto;padding:22px 18px;border:1px solid #a4e4f44d;border-radius:22px;background:#06233aeb;box-shadow:0 18px 80px #0005}
+.eyebrow{font-size:10px;letter-spacing:.24em;color:#77d4d8;font-weight:800}
+.panel h1{font-size:clamp(30px,7vw,48px);line-height:.95;letter-spacing:-.045em;margin:13px 0}
+.panel h2{margin:8px 0;font-size:25px}
+.panel p{font-size:13px;line-height:1.5;color:#bce0e9;margin:12px auto;max-width:300px}
+.panel button{margin:8px 0 0;width:100%;padding:12px 15px;border:0;border-radius:12px;background:#9af0ce;color:#082c3c;font-weight:900;font-size:15px;cursor:pointer}
+.panel .mini{font-size:10px;color:#99bfcf;margin:8px auto}
+.summary{display:grid;grid-template-columns:1fr 1fr;gap:2px 16px;margin:12px 0 6px;text-align:left;font-size:12px}
+.summary div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid #a4e4f41f;padding:4px 0}
+.summary span{color:#9cc4d2}
+.summary b{color:#eefaff;text-align:right}
+.summary .wide{grid-column:1/-1}
+.evo{z-index:5}
+.evo .panel{max-width:650px}
+.evo p{margin:5px auto}
+.choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.choices button{position:relative;background:#153f58;color:#e9f9ff;text-align:left;border:1px solid #75b8cb55;padding:10px;min-height:100px;touch-action:manipulation}
+.choices button b,.choices button span{display:block}
+.choices button b{padding-right:18px}
+.choices button span{font-size:11px;font-weight:500;color:#b9dce7;margin-top:6px}
+.choices button small{display:block;color:#a3eed4;margin-top:5px}
+.choices .key{position:absolute;top:7px;right:8px;font-style:normal;font-size:10px;color:#8fc9ff;border:1px solid #8fc9ff55;border-radius:4px;padding:0 4px}
+@media(pointer:coarse){.choices .key{display:none}}
+@media(max-width:470px){.choices{grid-template-columns:1fr}.choices button{min-height:0;padding:8px}}
+@media(max-height:450px){.panel{padding:12px}.panel h1{font-size:30px}.panel p{margin:5px auto}.summary{margin:6px 0}}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<main id="game">
+  <canvas id="sea" aria-label="Underwater shark game"></canvas>
+
+  <div class="hud">
+    <div class="stats">
+      <div class="statline"><span>HEALTH</span><span id="hpText">100</span></div>
+      <div class="bar" id="hpWrap"><i id="hpBar"></i></div>
+      <div class="statline"><span>HUNGER</span><span id="foodText">100</span></div>
+      <div class="bar hunger" id="foodWrap"><i id="foodBar"></i></div>
+      <div class="statline"><span id="lvl">LEVEL 1</span><span id="xpText">0 / 65 XP</span></div>
+      <div class="bar xp"><i id="xpBar"></i></div>
+    </div>
+    <div class="score">
+      <small id="build">SCORE</small><span id="score">0</span>
+      <div class="size" id="growth">JUVENILE · 1.0 m</div>
+      <div class="depth" id="depth"></div>
+      <div class="combo" id="combo"></div>
+      <div class="mutations" id="mutations"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <div class="bottom">
+    <div class="left">
+      <div class="tools">
+        <button class="tool" id="pauseBtn" type="button" aria-label="Pause">II</button>
+        <button class="tool" id="muteBtn" type="button" aria-label="Toggle sound">♪</button>
+      </div>
+      <div class="hint" id="hint"></div>
+    </div>
+    <button class="boost" id="boost" type="button" aria-label="Hold to boost">BOOST</button>
+  </div>
+
+  <div class="veil" id="veil">
+    <div class="panel">
+      <div class="eyebrow" id="eyebrow">OCEAN SURVIVAL</div>
+      <h1 id="headline">ABYSSAL<br>APPETITE</h1>
+      <p id="desc">Start small. Hunt to survive. Grow until yesterday's predators become today's prey, then dive into the dark for bigger meals.</p>
+      <div class="summary hidden" id="summary"></div>
+      <button id="start" type="button">Dive in</button>
+      <p class="mini" id="bestLine"></p>
+      <p class="mini">Touch &amp; keyboard · No downloads or external assets required</p>
+    </div>
+  </div>
+
+  <div class="veil hidden" id="pauseVeil">
+    <div class="panel">
+      <div class="eyebrow">DIVE PAUSED</div>
+      <h2>Paused</h2>
+      <p id="pauseInfo"></p>
+      <button id="resume" type="button">Resume</button>
+      <button id="quit" type="button" style="background:#153f58;color:#e9f9ff">End dive</button>
+      <p class="mini">P or Esc resumes · M toggles sound</p>
+    </div>
+  </div>
+
+  <div class="veil evo hidden" id="evolution">
+    <div class="panel">
+      <div class="eyebrow">ADAPTIVE EVOLUTION</div>
+      <h2 id="evoTitle">Choose a mutation</h2>
+      <p>One choice per level. Mutations stack during this dive.</p>
+      <div class="choices" id="choices"></div>
+    </div>
+  </div>
+</main>
+<script>
+'use strict';
+/* ==========================================================================
+   Abyssal Appetite: single-file, asset-free ocean survival prototype.
+
+   Sections
+     1. Utilities & config        6. Fish AI, eating & damage
+     2. Canvas & run state        7. Rendering
+     3. Audio (synthesized)       8. HUD, menus & evolution
+     4. Spawning                  9. Input
+     5. Player & world update    10. Main loop & boot
+
+   Add ?debug to the URL for an FPS overlay and a test hook (window.__aa).
+   ========================================================================== */
+
+// ---------- 1. Utilities & config ----------
+const VERSION = '0.4.0';
+const $ = id => document.getElementById(id);
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const rand = (a, b) => a + Math.random() * (b - a);
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const ease = (rate, dt) => 1 - Math.exp(-dt * rate);
+const mod = (n, m) => ((n % m) + m) % m;
+function seeded(n) { const a = Math.sin(n * 127.1 + 73.7) * 43758.5453; return a - Math.floor(a); }
+function loadPref(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function savePref(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) { /* storage unavailable */ } }
+const PREF = { best: 'abyssal-appetite:best', muted: 'abyssal-appetite:muted' };
+const DEBUG = new URLSearchParams(location.search).has('debug');
+const COARSE = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+
+const WORLD = { w: 4600, h: 3000 };
+const FLOOR = WORLD.h - 35;            // seabed line the player can't pass
+const METERS_PER_PX = 0.5;             // depth readout scale
+const BASE_R = 23;                     // starting player radius (1.0 m)
+const MAX_R = 125;
+const FISH_CAP = 200;
+const LOCAL_CAP = 95;                  // max fish within ~1.6 screens of the player
+const GROWTH_STEPS = [32, 48, 68, 100];
+// Pacing knobs. Growth per meal tapers as you get bigger; hunger drains faster for big bodies.
+const TUNE = { growArea: .1, growFlat: 10, growFalloff: 1.6, hungerPerSize: .3, squidScale: [1.05, 1.3], xpBase: 65, xpLinear: 35, xpSquare: 6 };
+
+const ZONES = [
+  { name: 'SUNLIT SHALLOWS', top: 0,    mult: 1   },
+  { name: 'TWILIGHT ZONE',   top: 1000, mult: 1.5 },
+  { name: 'MIDNIGHT ABYSS',  top: 2000, mult: 2   },
+];
+const zoneAt = y => y >= ZONES[2].top ? 2 : y >= ZONES[1].top ? 1 : 0;
+
+// r: radius, s: cruise speed, v: score/XP value, w: spawn weight per zone [shallows, twilight, abyss]
+const KINDS = [
+  { id: 'sardine',   name: 'Sardine',     r: 8,   s: 66,  c: '#8be4e3', v: 10,  w: [40, 6, 0] },
+  { id: 'reef',      name: 'Reef fish',   r: 13,  s: 47,  c: '#e9be64', v: 20,  w: [28, 3, 0] },
+  { id: 'tuna',      name: 'Tuna',        r: 23,  s: 72,  c: '#6cafe2', v: 45,  w: [13, 18, 3],  predator: true },
+  { id: 'barracuda', name: 'Barracuda',   r: 34,  s: 90,  c: '#b2c2ca', v: 85,  w: [3.5, 14, 7],   predator: true },
+  { id: 'shark',     name: 'Shark',       r: 51,  s: 108, c: '#91a8be', v: 160, w: [1, 6.5, 9],  predator: true },
+  { id: 'orca',      name: 'Orca',        r: 75,  s: 89,  c: '#263b55', v: 300, w: [0.6, 2.8, 3], predator: true },
+  { id: 'jelly',     name: 'Jellyfish',   r: 24,  s: 16,  c: '#e7a8ff', v: 40,  w: [3, 11, 5],   hazard: true, minEat: 48 },
+  { id: 'lantern',   name: 'Lanternfish', r: 9,   s: 58,  c: '#9fd2f0', v: 22,  w: [0, 9, 30] },
+  { id: 'angler',    name: 'Anglerfish',  r: 30,  s: 40,  c: '#3a3347', v: 110, w: [0, 1.5, 14], predator: true, sense: 220, lunge: 1.9 },
+  { id: 'squid',     name: 'Giant squid', r: 104, s: 70,  c: '#b4554c', v: 900, w: [0, 0, 1.2],  predator: true, sense: 430, max: 2 },
+];
+const KIND = Object.fromEntries(KINDS.map((d, i) => [d.id, i]));
+
+const MUT = [
+  { id: 'bloodrush',  name: 'Bloodrush',            desc: '+15% swim speed', max: 3 },
+  { id: 'jaw',        name: 'Razor Jaw',            desc: '+12% edible prey size', max: 3 },
+  { id: 'ironhide',   name: 'Ironhide',             desc: '18% less damage from bites and stings', max: 3 },
+  { id: 'metabolism', name: 'Efficient Metabolism', desc: '13% less hunger drain', max: 3 },
+  { id: 'regen',      name: 'Regeneration',         desc: '+0.65 HP/sec while fed', max: 3 },
+  { id: 'overdrive',  name: 'Overdrive',            desc: '+15% boost speed', max: 3 },
+  { id: 'ambush',     name: 'Ambush',               desc: 'Prey notice you 15% later', max: 3 },
+  { id: 'gluttony',   name: 'Gluttony',             desc: '+20% score and food from prey', max: 3 },
+  { id: 'adrenaline', name: 'Adrenaline',           desc: '+12% speed after feeding', max: 3 },
+  { id: 'gigantism',  name: 'Gigantism',            desc: '+25% growth per meal', max: 3 },
+  { id: 'shockwave',  name: 'Shockwave',            desc: 'Stun nearby fish every 6 sec; wider radius per rank', max: 3 },
+  { id: 'biolum',     name: 'Bioluminescence',      desc: '+35% light radius in the deep', max: 2, when: () => p.maxZone >= 1 },
+  { id: 'jellyproof', name: 'Jellyproof Hide',      desc: 'Immune to jellyfish stings, and jellyfish become food', max: 1, when: () => p.stings > 0 },
+  { id: 'second',     name: 'Second Life',          desc: 'Survive one fatal encounter', max: 1 },
+];
+
+// ---------- 2. Canvas & run state ----------
+const canvas = $('sea'), ctx = canvas.getContext('2d', { alpha: false });
+let W = 0, H = 0, dpr = 1, dprCap = Math.min(2, window.devicePixelRatio || 1), slowTime = 0;
+let active = false, paused = false, evolving = false, prev = 0, phase = 0;
+let p = null, fish = [], bubbles = [], pops = [], parts = [], offers = [];
+const cam = { x: 0, y: 0 };
+let shakeAmt = 0, toastTimer = 0, spawnTimer = 0, hudTimer = 0, hintTimer = 0, evoOpenedAt = 0;
+let best = Number(loadPref(PREF.best)) || 0;
+let keys = {}, aim = null, boosting = false, steer = null, boostTouch = null, mouseSteer = false, mouseBoost = false, boostGeometry = null;
+let floorTips = [], fps = 60;
+const gradCache = new Map();
+const motes = Array.from({ length: 70 }, (_, i) => ({ x: seeded(i * 3.1) * 4000, y: seeded(i * 7.7) * 4000, z: .3 + seeded(i * 1.9) * .7 }));
+
+const rank = id => p?.mods?.[id] || 0;
+
+function resize() {
+  const r = canvas.getBoundingClientRect();
+  W = r.width; H = r.height; dpr = dprCap;
+  const bw = Math.max(1, Math.round(W * dpr)), bh = Math.max(1, Math.round(H * dpr));
+  if (canvas.width !== bw || canvas.height !== bh) { canvas.width = bw; canvas.height = bh; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  boostGeometry = null;
+}
+
+// ---------- 3. Audio (synthesized, no files) ----------
+const Sound = (() => {
+  const VOL = .55;
+  let ac = null, master = null, noiseBuf = null, lastChomp = 0;
+  let muted = loadPref(PREF.muted) === '1';
+  function init() {
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try { ac = new AC(); } catch (e) { ac = null; return; }
+    master = ac.createGain(); master.gain.value = muted ? 0 : VOL; master.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    // Low, slowly breathing underwater rumble.
+    const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(), lfo = ac.createOscillator(), lg = ac.createGain();
+    s.buffer = noiseBuf; s.loop = true; f.type = 'lowpass'; f.frequency.value = 240; g.gain.value = .08;
+    lfo.frequency.value = .07; lg.gain.value = 110;
+    lfo.connect(lg); lg.connect(f.frequency); s.connect(f); f.connect(g); g.connect(master);
+    s.start(); lfo.start();
+  }
+  function env(g, t, peak, dur) {
+    g.gain.setValueAtTime(.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + .008);
+    g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  }
+  function tone(f0, f1, dur, type = 'sine', vol = .2, delay = 0) {
+    if (!ac || muted) return;
+    const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    env(g, t, vol, dur); o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + .05);
+  }
+  function noise(dur, vol, freq, f1 = freq, q = 1, delay = 0) {
+    if (!ac || muted) return;
+    const t = ac.currentTime + delay, s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    s.buffer = noiseBuf; f.type = 'lowpass'; f.Q.value = q;
+    f.frequency.setValueAtTime(freq, t); f.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    env(g, t, vol, dur); s.connect(f); f.connect(g); g.connect(master);
+    s.start(t, Math.random()); s.stop(t + dur + .05);
+  }
+  return {
+    init,
+    chomp(r) {
+      if (!ac) return;
+      if (ac.currentTime - lastChomp < .045) return;
+      lastChomp = ac.currentTime;
+      const k = clamp(1.4 - r / 90, .45, 1.4);
+      noise(.09, .32, 1900 * k, 300); tone(260 * k, 85 * k, .11, 'triangle', .2);
+    },
+    hurt()   { tone(150, 45, .32, 'sawtooth', .16); noise(.26, .3, 700, 110); },
+    sting()  { tone(1400, 500, .16, 'square', .06); tone(1900, 900, .12, 'square', .045, .05); },
+    level()  { [523, 659, 784, 1046].forEach((f, i) => tone(f, f * 1.01, .22, 'triangle', .13, i * .07)); },
+    frenzy() { tone(440, 880, .18, 'triangle', .11); },
+    growth() { tone(196, 392, .5, 'sine', .2); tone(294, 588, .5, 'sine', .12, .06); },
+    zone()   { tone(110, 70, 1.3, 'sine', .22); noise(1.1, .12, 420, 70); },
+    pulse()  { tone(95, 40, .35, 'sine', .25); },
+    death()  { tone(330, 55, 1.1, 'sawtooth', .13); noise(.8, .2, 900, 60); },
+    suspend(on) { if (!ac) return; on ? ac.suspend() : ac.resume(); },
+    toggle() {
+      muted = !muted; savePref(PREF.muted, muted ? '1' : '0');
+      if (master) master.gain.setTargetAtTime(muted ? 0 : VOL, ac.currentTime, .03);
+      return muted;
+    },
+    get muted() { return muted; },
+  };
+})();
+
+// ---------- 4. Spawning ----------
+function makeFish(k, x, y) {
+  const d = KINDS[k], a = rand(0, TAU);
+  let r = d.r * rand(.83, 1.16);
+  // The abyss always keeps something bigger than you: giant squids grow with the player.
+  if (d.id === 'squid' && p) r = Math.min(165, Math.max(r, p.r * rand(...TUNE.squidScale)));
+  return { k, x, y, r, a, vx: Math.cos(a) * d.s, vy: Math.sin(a) * d.s * .4, seed: rand(0, 100), c: d.c, home: y, stun: 0 };
+}
+function spawnAt(k, x, y) { const f = makeFish(k, x, y); fish.push(f); return f; }
+function pickKind(y) {
+  const z = zoneAt(y);
+  let total = 0;
+  const weights = KINDS.map(d => {
+    let w = d.w[z];
+    const cap = d.id === 'squid' && p && p.r >= 80 ? d.max + 1 : d.max; // a third squid hunts big players
+    if (cap && w > 0 && fish.reduce((n, f) => n + (KINDS[f.k] === d), 0) >= cap) w = 0;
+    total += w; return w;
+  });
+  let roll = Math.random() * total;
+  for (let k = 0; k < weights.length; k++) { roll -= weights[k]; if (roll <= 0) return k; }
+  return 0;
+}
+function onScreen(x, y, m = 0) { return x > cam.x - m && x < cam.x + W + m && y > cam.y - m && y < cam.y + H + m; }
+function spawnNear() {
+  const far = Math.max(W, H) * 1.6;
+  let local = 0;
+  for (const f of fish) if (Math.abs(f.x - p.x) < far && Math.abs(f.y - p.y) < far) local++;
+  if (local >= LOCAL_CAP) return;
+  if (fish.length >= FISH_CAP) {
+    // Recycle a fish the player can't see so the area around them stays alive.
+    for (let tries = 0; tries < 12; tries++) {
+      const i = Math.floor(Math.random() * fish.length);
+      if (dist(fish[i], p) > far) { fish.splice(i, 1); break; }
+    }
+    if (fish.length >= FISH_CAP) return;
+  }
+  for (let tries = 0; tries < 5; tries++) {
+    const a = rand(0, TAU), r = Math.max(W, H) * .65 + rand(65, 230);
+    const x = clamp(p.x + Math.cos(a) * r, 70, WORLD.w - 70), y = clamp(p.y + Math.sin(a) * r, 90, FLOOR - 60);
+    if (onScreen(x, y, 60)) continue;
+    spawnAt(pickKind(y), x, y);
+    return;
+  }
+}
+
+// ---------- 5. Player & world update ----------
+function reset() {
+  p = {
+    x: WORLD.w * .43, y: 360, r: BASE_R, hp: 100, food: 100, score: 0, eaten: 0,
+    vx: 0, vy: 0, a: 0, inv: 0, stung: 0, hurt: 0, combo: 0, comboTime: 0,
+    xp: 0, level: 1, nextXP: 65, mods: {}, swimPhase: 0, swimRate: 6, boostMix: 0, boostOn: false,
+    secondUsed: false, pulse: 0, trail: 0, time: 0, maxDepth: 0, zone: 0, maxZone: 0,
+    stings: 0, biggest: null, cause: '',
+  };
+  evolving = false; offers = []; $('evolution').classList.add('hidden');
+  cam.x = clamp(p.x - W / 2, 0, Math.max(0, WORLD.w - W));
+  cam.y = clamp(p.y - H / 2, 0, Math.max(0, WORLD.h - H));
+  fish = []; pops = []; parts = []; bubbles = [];
+  spawnTimer = 0; toastTimer = 0; shakeAmt = 0; clearInput();
+  // Populate the whole ocean by zone, keeping big threats away from the start.
+  for (let i = 0; i < 170; i++) {
+    const x = rand(80, WORLD.w - 80), y = rand(100, FLOOR - 75), k = pickKind(y);
+    if (KINDS[k].predator && Math.hypot(x - p.x, y - p.y) < 650) { i--; continue; }
+    spawnAt(k, x, y);
+  }
+  // A few easy snacks right around the starting point.
+  for (let i = 0; i < 19; i++) {
+    const a = rand(0, TAU), r = rand(90, Math.min(440, Math.max(220, W * .6)));
+    spawnAt(i % 3 === 0 ? KIND.reef : KIND.sardine, clamp(p.x + Math.cos(a) * r, 60, WORLD.w - 60), clamp(p.y + Math.sin(a) * r, 60, WORLD.h - 60));
+  }
+  for (let i = 0; i < 140; i++) bubbles.push({ x: rand(0, WORLD.w), y: rand(0, WORLD.h), r: rand(1, 5), s: rand(5, 20) });
+  $('toast').textContent = '';
+  updateHud();
+}
+
+function update(dt) {
+  p.time += dt;
+  // Steering: keyboard wins; otherwise the analog touch/mouse stick.
+  let dx = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0);
+  let dy = (keys.s || keys.arrowdown ? 1 : 0) - (keys.w || keys.arrowup ? 1 : 0);
+  if (!dx && !dy && aim) { dx = aim.x; dy = aim.y; }
+  const l = Math.hypot(dx, dy);
+  const boost = !!((boosting || keys[' ']) && p.food > 8 && l > 0);
+  let speed = (boost ? 415 * (1 + .15 * rank('overdrive')) : 240)
+    * (1 + .15 * rank('bloodrush') + (p.comboTime > 0 ? .12 * rank('adrenaline') : 0)) * Math.min(1, l);
+  if (p.stung > 0) speed *= .6;
+  const ax = l ? dx / l * speed : 0, ay = l ? dy / l * speed : 0, blend = ease(7, dt);
+  p.vx += (ax - p.vx) * blend; p.vy += (ay - p.vy) * blend;
+  p.x = clamp(p.x + p.vx * dt, p.r, WORLD.w - p.r);
+  p.y = clamp(p.y + p.vy * dt, p.r + 5, FLOOR - p.r);
+  if (Math.hypot(p.vx, p.vy) > 10) { const a = Math.atan2(p.vy, p.vx); p.a += Math.atan2(Math.sin(a - p.a), Math.cos(a - p.a)) * blend; }
+  p.boostOn = boost;
+  p.boostMix += (Number(boost) - p.boostMix) * ease(7, dt);
+  if (boost && (p.trail -= dt) <= 0) {
+    p.trail = .035;
+    addPart({ x: p.x - Math.cos(p.a) * p.r * 1.05 + rand(-3, 3), y: p.y - Math.sin(p.a) * p.r * 1.05 + rand(-3, 3), vx: rand(-15, 15), vy: rand(-25, 5), life: .7, r: rand(1.5, 3.5), type: 'bubble', g: -40, drag: 2 });
+  }
+
+  // Hunger, health and status timers.
+  const bodyCost = 1 + TUNE.hungerPerSize * (p.r / BASE_R - 1);
+  p.food = clamp(p.food - dt * (boost ? 7.5 : 1.55) * bodyCost * (1 - .13 * rank('metabolism')), 0, 100);
+  p.inv = Math.max(0, p.inv - dt); p.stung = Math.max(0, p.stung - dt); p.hurt = Math.max(0, p.hurt - dt);
+  p.comboTime = Math.max(0, p.comboTime - dt); if (!p.comboTime) p.combo = 0;
+  if (p.food <= 0) { p.hp = Math.max(0, p.hp - dt * 9); p.cause = 'starved'; }
+  else if (p.food > 72) p.hp = Math.min(100, p.hp + dt * 1.2);
+  if (p.food > 0) p.hp = Math.min(100, p.hp + dt * .65 * rank('regen'));
+
+  if (rank('shockwave') && (p.pulse -= dt) <= 0) {
+    p.pulse = 6;
+    const R = 150 + rank('shockwave') * 35;
+    for (const f of fish) if (dist(f, p) < R) f.stun = 1.5;
+    addPart({ x: p.x, y: p.y, life: .55, R, type: 'ring', color: '#9af0ce' });
+    Sound.pulse();
+  }
+
+  // Depth tracking.
+  p.maxDepth = Math.max(p.maxDepth, p.y);
+  const z = zoneAt(p.y);
+  if (z !== p.zone) {
+    p.zone = z;
+    announce(ZONES[z].name + (z ? ' · SCORE ×' + ZONES[z].mult : ''));
+    if (z > p.maxZone) { p.maxZone = z; Sound.zone(); }
+  }
+
+  if (toastTimer > 0 && (toastTimer -= dt) <= 0) $('toast').textContent = '';
+  if (hintTimer > 0 && (hintTimer -= dt) <= 0) $('hint').classList.add('fade');
+
+  // Camera eases toward the player with a little look-ahead.
+  const tx = clamp(p.x + p.vx * .3 - W / 2, 0, Math.max(0, WORLD.w - W));
+  const ty = clamp(p.y + p.vy * .3 - H / 2, 0, Math.max(0, WORLD.h - H));
+  cam.x += (tx - cam.x) * Math.min(1, dt * 5); cam.y += (ty - cam.y) * Math.min(1, dt * 5);
+  shakeAmt = Math.max(0, shakeAmt - dt * 2.4);
+
+  updateFish(dt);
+
+  spawnTimer += dt;
+  if (spawnTimer > .45) { spawnTimer = 0; spawnNear(); }
+  for (const b of bubbles) { b.y -= b.s * dt; if (b.y < 0) b.y = WORLD.h; }
+  for (let i = pops.length - 1; i >= 0; i--) { pops[i].y -= dt * 30; pops[i].t -= dt; if (pops[i].t <= 0) pops.splice(i, 1); }
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const q = parts[i];
+    if ((q.life -= dt) <= 0) { parts.splice(i, 1); continue; }
+    if (q.type === 'ring') continue;
+    q.x += q.vx * dt; q.y += q.vy * dt;
+    const dr = Math.exp(-dt * (q.drag ?? 3));
+    q.vx *= dr; q.vy = q.vy * dr + (q.g ?? 0) * dt;
+  }
+
+  if ((hudTimer -= dt) <= 0) { hudTimer = .1; updateHud(); }
+
+  if (p.hp <= 0) {
+    if (rank('second') && !p.secondUsed) {
+      p.secondUsed = true; p.hp = 45; p.food = Math.max(35, p.food); p.inv = 3;
+      announce('SECOND LIFE'); Sound.growth();
+      addPart({ x: p.x, y: p.y, life: .7, R: p.r * 4, type: 'ring', color: '#fff3b0' });
+    } else { end(deathReason()); return; }
+  }
+  if (p.xp >= p.nextXP) openEvolution();
+}
+
+function deathReason() {
+  if (p.cause === 'starved') return 'Starved in the deep';
+  if (p.cause === 'Jellyfish') return 'Stung to death by jellyfish';
+  const n = p.cause.toLowerCase();
+  return 'Devoured by ' + (/^[aeiou]/.test(n) ? 'an ' : 'a ') + n;
+}
+
+// ---------- 6. Fish AI, eating & damage ----------
+function canEat(f) {
+  const d = KINDS[f.k];
+  if (d.minEat && p.r < d.minEat && !rank('jellyproof')) return false;
+  return f.r <= p.r * .83 * (1 + .12 * rank('jaw'));
+}
+function isThreat(f) {
+  const d = KINDS[f.k];
+  if (d.hazard) return !rank('jellyproof') && !canEat(f);
+  return !!d.predator && f.r > p.r * 1.04;
+}
+
+function updateFish(dt) {
+  const fleeR = 270 * (1 - .15 * rank('ambush')), turn = Math.min(1, dt * 2.3);
+  for (let i = fish.length - 1; i >= 0; i--) {
+    const f = fish[i], d = KINDS[f.k];
+    let dd = dist(f, p);
+    const edible = canEat(f), threat = isThreat(f);
+    let tx, ty;
+    if (d.hazard) {
+      // Jellyfish drift and bob; they never chase or flee.
+      f.a += Math.sin(phase * .3 + f.seed) * dt * .25;
+      tx = Math.cos(f.a) * d.s; ty = Math.sin(phase * 1.4 + f.seed) * d.s * 1.3;
+    } else if (edible && dd < fleeR) {
+      tx = Math.cos(f.a) * d.s + (f.x - p.x) / Math.max(dd, 1) * d.s * .85;
+      ty = Math.sin(f.a) * d.s * .5 + (f.y - p.y) / Math.max(dd, 1) * d.s * .85;
+    } else if (threat && dd < (d.sense || 335)) {
+      // Predators telegraph: a short "!" pause when they first spot you, then the charge.
+      if (!f.alerted) { f.alerted = true; f.alertT = .5; }
+      const chase = f.alertT > 0 ? .15 : d.lunge || 1.45;
+      tx = (p.x - f.x) / Math.max(dd, 1) * d.s * chase; ty = (p.y - f.y) / Math.max(dd, 1) * d.s * chase;
+    } else {
+      if (f.alerted && dd > (d.sense || 335) * 1.4) f.alerted = false;
+      f.a += Math.sin(phase * .8 + f.seed) * dt * .42;
+      tx = Math.cos(f.a) * d.s; ty = Math.sin(f.a) * d.s * .5;
+      const off = f.home - f.y; // drift back toward the depth band it lives in
+      if (Math.abs(off) > 380) ty += Math.sign(off) * d.s * .45;
+    }
+    if (f.alertT > 0) f.alertT -= dt;
+    if (d.id === 'squid') { const m = .55 + 1.15 * Math.max(0, Math.sin(phase * 1.8 + f.seed)) ** 3; tx *= m; ty *= m; f.jet = m; }
+    if (f.stun > 0) { f.stun -= dt; tx *= .1; ty *= .1; }
+    f.vx += (tx - f.vx) * turn; f.vy += (ty - f.vy) * turn;
+    f.x += f.vx * dt; f.y += f.vy * dt;
+    if (f.x < f.r + 15 || f.x > WORLD.w - f.r - 15) { f.x = clamp(f.x, f.r + 15, WORLD.w - f.r - 15); f.a = Math.PI - f.a; f.vx *= -1; }
+    if (f.y < f.r + 30 || f.y > FLOOR - f.r - 15) { f.y = clamp(f.y, f.r + 30, FLOOR - f.r - 15); f.a = -f.a; f.vy *= -1; }
+
+    dd = dist(f, p);
+    if (dd < (p.r + f.r) * .72) {
+      if (edible) { eat(f, d); fish.splice(i, 1); continue; }
+      if (p.inv <= 0 && threat) {
+        if (d.hazard) sting(f, d, dd); else bite(f, d, dd);
+        if (p.hp <= 0) return;
+      }
+    }
+  }
+}
+
+function eat(f, d) {
+  const z = zoneAt(f.y);
+  p.combo++; p.comboTime = 2.1;
+  const frenzy = 1 + Math.min(3, Math.floor((p.combo - 1) / 4));
+  const gain = Math.round(d.v * frenzy * ZONES[z].mult * (1 + .2 * rank('gluttony')));
+  p.xp += d.v * (1 + .25 * z); p.score += gain; p.eaten++;
+  if (p.biggest === null || d.v > KINDS[p.biggest].v) p.biggest = f.k;
+  const old = p.r;
+  const grow = (f.r * f.r * TUNE.growArea + TUNE.growFlat) * (1 + .25 * rank('gigantism')) * (BASE_R / p.r) ** TUNE.growFalloff;
+  p.r = Math.min(MAX_R, Math.sqrt(p.r * p.r + grow));
+  p.food = Math.min(100, p.food + (8 + f.r * .32) * (1 + .2 * rank('gluttony')));
+  p.hp = Math.min(100, p.hp + 1.5);
+  pops.push({ x: f.x, y: f.y, t: 1, txt: '+' + gain });
+  burst(f.x, f.y, f.c, 5 + Math.min(12, f.r / 4));
+  Sound.chomp(f.r);
+  if (f.r > 45) shake(.35);
+  if (d.id === 'squid') { announce('GIANT SQUID DEVOURED!'); Sound.growth(); }
+  else if (GROWTH_STEPS.some(n => old < n && p.r >= n)) { announce('GROWTH! NEW PREY UNLOCKED'); Sound.growth(); }
+  else if (p.combo % 4 === 0) { announce('FEEDING FRENZY ×' + (1 + Math.min(3, Math.floor(p.combo / 4)))); Sound.frenzy(); }
+}
+
+function knockback(f, dd, force) {
+  const nx = (p.x - f.x) / Math.max(dd, 1), ny = (p.y - f.y) / Math.max(dd, 1);
+  p.vx = nx * force; p.vy = ny * force;
+  return [nx, ny];
+}
+function bite(f, d, dd) {
+  const dmg = Math.round((10 + f.r * .14) * (1 - .18 * rank('ironhide')));
+  p.hp = Math.max(0, p.hp - dmg); p.inv = 1.15; p.hurt = .35; p.cause = d.name;
+  const [nx, ny] = knockback(f, dd, 350);
+  pops.push({ x: p.x, y: p.y, t: 1, txt: '−' + dmg + ' HP', bad: true });
+  burst(p.x - nx * p.r * .5, p.y - ny * p.r * .5, '#ff8f86', 12);
+  shake(.7); Sound.hurt();
+}
+function sting(f, d, dd) {
+  const dmg = Math.round(6 * (1 - .18 * rank('ironhide')));
+  p.hp = Math.max(0, p.hp - dmg); p.inv = .8; p.stung = 1.6; p.hurt = .25; p.stings++; p.cause = d.name;
+  knockback(f, dd, 220);
+  pops.push({ x: p.x, y: p.y, t: 1, txt: 'STUNG −' + dmg, bad: true });
+  burst(p.x, p.y, '#e7a8ff', 10);
+  shake(.35); Sound.sting();
+}
+
+function addPart(q) { if (parts.length < 320) { q.max = q.life; parts.push(q); } }
+function burst(x, y, color, n) {
+  for (let i = 0; i < n; i++) {
+    const a = rand(0, TAU), s = rand(30, 120);
+    addPart({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(.35, .7), r: rand(1.5, 3.5), color, type: 'bit', drag: 4, g: 12 });
+  }
+  for (let i = 0; i < 3; i++) addPart({ x: x + rand(-6, 6), y: y + rand(-6, 6), vx: rand(-10, 10), vy: rand(-40, -15), life: rand(.6, 1), r: rand(1.5, 4), type: 'bubble', g: -30, drag: 1.5 });
+}
+function shake(a) { shakeAmt = Math.max(shakeAmt, a); }
+
+// ---------- 7. Rendering ----------
+function fill(color, fn) { ctx.beginPath(); fn(); ctx.fillStyle = color; ctx.fill(); }
+function line(color, width, fn) { ctx.beginPath(); fn(); ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke(); }
+// Gradients are defined in each creature's unit space, so one per look can be reused every frame.
+function cachedGradient(key, x0, y0, x1, y1, stops) {
+  let g = gradCache.get(key);
+  if (!g) { g = ctx.createLinearGradient(x0, y0, x1, y1); for (const [o, c] of stops) g.addColorStop(o, c); gradCache.set(key, g); }
+  return g;
+}
+function makeGlow(rgb) {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, `rgba(${rgb},1)`); gr.addColorStop(.25, `rgba(${rgb},.5)`); gr.addColorStop(1, `rgba(${rgb},0)`);
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return c;
+}
+const GLOW = { violet: makeGlow('212,140,255'), cyan: makeGlow('127,232,255'), gold: makeGlow('255,226,130'), red: makeGlow('255,96,80'), mint: makeGlow('140,255,205') };
+function glow(sprite, x, y, R, a) { if (a <= .01) return; ctx.globalAlpha = Math.min(1, a); ctx.drawImage(sprite, x - R, y - R, R * 2, R * 2); }
+
+// Cached parallax hills and kelp silhouettes.
+const scenery = [];
+for (let layer = 0; layer < 3; layer++) {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 512;
+  const g = c.getContext('2d'), base = 390 - layer * 27;
+  g.fillStyle = ['#276f83', '#15586c', '#104252'][layer];
+  g.beginPath(); g.moveTo(0, 512);
+  for (let x = 0; x <= 1024; x += 8) g.lineTo(x, base + 45 * Math.sin(x * TAU / 512 + layer) + 19 * Math.cos(x * TAU / 256 + layer));
+  g.lineTo(1024, 512); g.fill();
+  for (let i = 0; i < 18; i++) {
+    const x = seeded(i + layer * 41) * 1024, y = base + 45 * Math.sin(x * TAU / 512 + layer) + 19 * Math.cos(x * TAU / 256 + layer), h = 30 + seeded(i + 77) * 130;
+    g.strokeStyle = ['#327f88', '#206b71', '#1a535b'][layer]; g.lineWidth = 4 + layer * 2; g.lineCap = 'round';
+    for (let j = -1; j <= 1; j++) { g.beginPath(); g.moveTo(x, y); g.bezierCurveTo(x + j * 16, y - h * .3, x - j * 20, y - h * .7, x + j * 25, y - h); g.stroke(); }
+  }
+  scenery.push(c);
+}
+
+function backdrop() {
+  const d = clamp((cam.y + H * .4) / WORLD.h, 0, 1);
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, `rgb(${Math.round(19 - 15 * d)},${Math.round(139 - 122 * d)},${Math.round(167 - 132 * d)})`);
+  g.addColorStop(1, `rgb(${Math.round(4 - 2 * d)},${Math.round(63 - 52 * d)},${Math.round(99 - 76 * d)})`);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const lit = 1 - clamp((cam.y - 450) / 1000, 0, 1); // sunlit scenery fades out as you descend
+  if (lit > .01) {
+    for (let i = 0; i < 3; i++) {
+      const f = .16 + i * .16, y = H * (.34 + i * .16) - cam.y * f * .37 - 280;
+      ctx.globalAlpha = (.22 + i * .12) * lit;
+      for (let x = -mod(cam.x * f, 1024); x < W; x += 1024) ctx.drawImage(scenery[i], x, y, 1024, 512);
+    }
+    ctx.globalAlpha = 1;
+    for (let i = -1; i < W / 180 + 1; i++) {
+      const x = i * 180 - cam.x * .13 % 180 + Math.sin(phase * .45 + i) * 12;
+      fill(`rgba(184,244,232,${.045 * lit})`, () => { ctx.moveTo(x, 0); ctx.lineTo(x + 33, 0); ctx.lineTo(x + H * .48 + 95, H); ctx.lineTo(x + H * .4, H); ctx.closePath(); });
+    }
+  }
+  if (lit < 1) { // marine snow drifting through the dark
+    ctx.fillStyle = '#cfe6ee';
+    for (let i = 0; i < motes.length; i++) {
+      const m = motes[i];
+      const x = mod(m.x - cam.x * m.z * .6 + Math.sin(phase * .3 + i) * 8, W + 20) - 10;
+      const y = mod(m.y - cam.y * m.z * .6 + phase * 7 * m.z, H + 20) - 10;
+      ctx.globalAlpha = (1 - lit) * .4 * m.z;
+      ctx.fillRect(x, y, 1.2 + m.z * 1.4, 1.2 + m.z * 1.4);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+// Shared facing/tilt logic so creatures flip smoothly instead of swimming upside down.
+function orient(x, y, r, a, entity) {
+  ctx.save(); ctx.translate(x, y);
+  const co = Math.cos(a);
+  let face = entity?.face ?? (co < 0 ? -1 : 1);
+  if (co > .20) face = 1; else if (co < -.20) face = -1;
+  let tilt = clamp(Math.atan2(Math.sin(a), Math.abs(co)), -1, 1);
+  if (entity) { entity.face = face; entity.tilt = (entity.tilt ?? tilt) * .82 + tilt * .18; tilt = entity.tilt; entity.o = { x, y, r, face, tilt }; }
+  ctx.scale(face, 1); ctx.rotate(tilt); ctx.scale(r, r);
+}
+// Converts a point in a creature's unit space to world space (used for glows).
+function toWorld(o, lx, ly) {
+  const c = Math.cos(o.tilt), s = Math.sin(o.tilt), x = (lx * c - ly * s) * o.r, y = (lx * s + ly * c) * o.r;
+  return [o.x + x * o.face, o.y + y];
+}
+
+function shape(x, y, r, a, c, id, player, entity) {
+  orient(x, y, r, a, entity);
+  const shark = player || id === 'barracuda' || id === 'shark' || id === 'orca';
+  const orca = id === 'orca' && !player, reef = id === 'reef', slim = id === 'barracuda';
+  const h = orca ? .54 : reef ? .48 : slim ? .27 : shark ? .35 : .29;
+  const t = player ? p.swimPhase : phase * 8 + (entity?.seed ?? 0) * .7, amp = player ? .85 - .28 * p.boostMix : 1;
+  const w = Math.sin(t) * amp, q = Math.sin(t - 1.1) * .19 * amp;
+  // Flexible peduncle and independently articulated caudal fin.
+  fill(c, () => { ctx.moveTo(-.44, -h * .55); ctx.bezierCurveTo(-.80, -h * .37, -.94, q - .10, -1.13, q); ctx.lineTo(-1.13, q + .12); ctx.bezierCurveTo(-.87, q + .16, -.68, h * .48, -.44, h * .58); ctx.closePath(); });
+  ctx.save(); ctx.translate(-1.1, q); ctx.rotate(w * .44);
+  fill(orca ? '#1a3045' : c, () => { ctx.moveTo(.09, 0); ctx.quadraticCurveTo(-.22, -.20, -.39, -(shark ? .76 : .49)); ctx.quadraticCurveTo(-.04, -.60, -.07, -.10); ctx.quadraticCurveTo(-.14, .16, -.41, shark ? .62 : .47); ctx.quadraticCurveTo(-.13, .45, .09, 0); ctx.closePath(); });
+  ctx.restore();
+  if (shark) fill(c, () => { ctx.moveTo(-.35, -h * .7); ctx.quadraticCurveTo(-.09, -.62, -.25, -(orca ? 1.02 : slim ? .62 : .83)); ctx.quadraticCurveTo(.15, -.72, .36, -h * .7); ctx.closePath(); });
+  const body = cachedGradient('body|' + id + '|' + c + '|' + h, 0, -h, 0, h, [
+    [0, orca ? '#15283b' : c], [.54, orca ? '#344a60' : c], [.72, orca ? '#71909c' : shark ? '#96b4c4' : c], [1, '#dceeea']]);
+  fill(body, () => { ctx.moveTo(-.78, q * .32); ctx.bezierCurveTo(-.45, -h * 1.2, .35, -h * 1.2, .94, -.12); ctx.quadraticCurveTo(1.12, .02, .80, h * .55); ctx.bezierCurveTo(.24, h * 1.18, -.42, h * .78, -.78, q * .32); ctx.closePath(); });
+  if (reef) for (let i = 0; i < 3; i++) { const u = -.42 + i * .30; fill('#a5673877', () => { ctx.moveTo(u, -h * .83); ctx.quadraticCurveTo(u + .18, 0, u, h * .84); ctx.lineTo(u + .10, h * .79); ctx.quadraticCurveTo(u + .28, 0, u + .10, -h * .83); ctx.closePath(); }); }
+  if (slim) line('#7d8f99', .035, () => { ctx.moveTo(-.6, -.02); ctx.lineTo(.7, -.06); });
+  if (orca) fill('#edf7f0', () => ctx.ellipse(.53, -.17, .23, .12, -.1, 0, TAU));
+  if (id === 'lantern') for (let i = 0; i < 5; i++) fill('#d8fbff', () => ctx.arc(-.45 + i * .26, h * .5, .06, 0, TAU));
+  ctx.save(); ctx.translate(.15, .15); ctx.rotate(Math.sin(t + .5) * .18);
+  fill(c, () => { ctx.moveTo(-.10, -.04); ctx.quadraticCurveTo(-.10, .39, -.45, shark ? .67 : .40); ctx.quadraticCurveTo(.04, .58, .32, .08); ctx.closePath(); });
+  ctx.restore();
+  if (shark) {
+    for (let i = 0; i < 3; i++) line('#345466', .026, () => { const u = .18 - i * .09; ctx.moveTo(u, -.10); ctx.quadraticCurveTo(u - .04, .02, u - .01, .14); });
+    const jaw = Math.max(0, player && p.comboTime > 1.90 ? Math.sin((2.1 - p.comboTime) * Math.PI / .2) * .19 : 0);
+    fill('#173242', () => { ctx.moveTo(.48, .15); ctx.quadraticCurveTo(.76, .23 + jaw, .96, .07); ctx.quadraticCurveTo(.72, .11, .48, .15); ctx.closePath(); });
+    if (jaw > .04) for (let i = 0; i < 3; i++) fill('#f5f2de', () => { const u = .64 + i * .09; ctx.moveTo(u, .15); ctx.lineTo(u + .04, .21); ctx.lineTo(u + .07, .13); ctx.closePath(); });
+  }
+  fill('#e6f8f5', () => ctx.arc(.66, -.12, .10, 0, TAU));
+  fill('#122a3c', () => ctx.arc(.69, -.12, .061, 0, TAU));
+  fill('#fff', () => ctx.arc(.71, -.15, .022, 0, TAU));
+  ctx.restore();
+}
+
+function drawJelly(f) {
+  const t = phase * 2.2 + f.seed, pulse = 1 + Math.sin(t) * .09;
+  ctx.save(); ctx.translate(f.x, f.y); ctx.scale(f.r, f.r); ctx.lineCap = 'round';
+  for (let i = 0; i < 5; i++) {
+    const u = -.44 + i * .22;
+    line('rgba(240,195,255,.5)', .05, () => { ctx.moveTo(u, .08); ctx.bezierCurveTo(u + Math.sin(t + i) * .16, .55, u - Math.sin(t * 1.1 + i) * .2, .95, u + Math.sin(t * .9 + i * 2) * .18, 1.4 + .12 * Math.sin(t + i)); });
+  }
+  fill('rgba(250,215,255,.55)', () => { ctx.moveTo(-.16, .06); ctx.quadraticCurveTo(-.22 + Math.sin(t) * .06, .5, -.05, .78); ctx.lineTo(.05, .78); ctx.quadraticCurveTo(.22 - Math.sin(t) * .06, .5, .16, .06); ctx.closePath(); });
+  const bell = cachedGradient('jelly', 0, -.6, 0, .15, [[0, '#f6d4ff'], [1, 'rgba(205,120,240,.6)']]);
+  fill(bell, () => { ctx.moveTo(-.64 * pulse, .12); ctx.bezierCurveTo(-.68 * pulse, -.66 / pulse, .68 * pulse, -.66 / pulse, .64 * pulse, .12); ctx.quadraticCurveTo(.32, .02, 0, .1); ctx.quadraticCurveTo(-.32, .02, -.64 * pulse, .12); ctx.closePath(); });
+  ctx.globalAlpha = .55; fill('#fff3ff', () => ctx.ellipse(0, -.2, .24 * pulse, .11, 0, 0, TAU)); ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function drawAngler(f) {
+  const t = phase * 6 + f.seed;
+  orient(f.x, f.y, f.r, Math.atan2(f.vy, f.vx), f);
+  fill('#2b2536', () => { ctx.moveTo(-.68, 0); ctx.lineTo(-1.12, -.34 + Math.sin(t) * .08); ctx.lineTo(-1.02, 0); ctx.lineTo(-1.12, .34 + Math.sin(t) * .08); ctx.closePath(); });
+  const body = cachedGradient('angler', 0, -.6, 0, .6, [[0, '#4a4160'], [.7, '#342d44'], [1, '#5d5470']]);
+  fill(body, () => ctx.ellipse(-.06, 0, .8, .6, 0, 0, TAU));
+  fill('#2b2536', () => { ctx.moveTo(-.25, -.5); ctx.quadraticCurveTo(-.05, -.82, .2, -.52); ctx.closePath(); });
+  fill('#120f18', () => { ctx.moveTo(.2, .12); ctx.quadraticCurveTo(.62, .02, .9, -.06); ctx.quadraticCurveTo(.86, .42, .2, .3); ctx.closePath(); });
+  fill('#2b2536', () => { ctx.moveTo(.12, .3); ctx.quadraticCurveTo(.7, .62, 1.0, .02); ctx.quadraticCurveTo(.68, .36, .12, .2); ctx.closePath(); });
+  for (let i = 0; i < 5; i++) { const u = .36 + i * .12; fill('#efe9d8', () => { ctx.moveTo(u, .27 - i * .05); ctx.lineTo(u + .04, .1 - i * .05); ctx.lineTo(u + .08, .25 - i * .05); ctx.closePath(); }); }
+  fill('#d6d0e6', () => ctx.arc(.44, -.22, .09, 0, TAU)); fill('#0d0b12', () => ctx.arc(.46, -.22, .05, 0, TAU));
+  const bx = 1.02 + Math.sin(t * .35) * .05, by = -.95 + Math.cos(t * .3) * .04;
+  line('#5a5170', .045, () => { ctx.moveTo(.28, -.52); ctx.quadraticCurveTo(.5, -1.2, bx, by); });
+  fill('#fff2b0', () => ctx.arc(bx, by, .09, 0, TAU));
+  ctx.restore();
+  f.lure = toWorld(f.o, bx, by);
+}
+
+function drawSquid(f) {
+  const t = phase * 3 + f.seed, jet = f.jet ?? 1;
+  orient(f.x, f.y, f.r, Math.atan2(f.vy, f.vx), f);
+  ctx.lineCap = 'round';
+  // Two long feeding tentacles with clubs.
+  for (const s of [-1, 1]) {
+    const ex = 1.95 - jet * .15, ey = s * .2 + Math.sin(t * 1.2 + s * 2) * .16;
+    line('#953c36', .05, () => { ctx.moveTo(.42, s * .05); ctx.bezierCurveTo(1.05, s * .28 + Math.sin(t * 1.1 + s) * .22, 1.5, s * .1 - Math.sin(t * .9) * .25, ex, ey); });
+    fill('#a8463f', () => ctx.ellipse(ex, ey, .13, .06, Math.sin(t) * .3, 0, TAU));
+  }
+  // Eight arms that fan out between jet pulses.
+  for (let i = 0; i < 8; i++) {
+    const off = (i - 3.5) * .07, wv = Math.sin(t * 1.3 + i * .8) * .12, fan = 1.6 + (1.4 - jet) * 1.2;
+    line(i % 2 ? '#9e423b' : '#b4554c', .085, () => { ctx.moveTo(.42, off); ctx.bezierCurveTo(.75, off * fan + wv, 1.0, off * fan * 1.3 - wv, 1.32 + .05 * Math.sin(t + i), off * fan * 1.6 + wv * 1.2); });
+  }
+  // Mantle with tail fins.
+  fill('#9a433c', () => { ctx.moveTo(-.7, 0); ctx.quadraticCurveTo(-.95, -.48, -1.32, -.02); ctx.quadraticCurveTo(-.95, .48, -.7, 0); ctx.closePath(); });
+  const mantle = cachedGradient('squid', 0, -.34, 0, .34, [[0, '#c9665b'], [.6, '#b4554c'], [1, '#e7a59a']]);
+  const sq = 1 + (1 - jet) * .06;
+  fill(mantle, () => { ctx.moveTo(.46, -.3 * sq); ctx.bezierCurveTo(.1, -.4 * sq, -.75, -.3 * sq, -1.18, 0); ctx.bezierCurveTo(-.75, .3 * sq, .1, .4 * sq, .46, .3 * sq); ctx.closePath(); });
+  for (let i = 0; i < 6; i++) fill('#8f3a3388', () => ctx.arc(-.9 + i * .22, (seeded(i + f.seed) - .5) * .3, .035 + seeded(i * 3 + f.seed) * .03, 0, TAU));
+  fill('#c2645a', () => ctx.ellipse(.46, 0, .16, .26, 0, 0, TAU));
+  fill('#f4f1e4', () => ctx.arc(.42, -.08, .11, 0, TAU)); fill('#151515', () => ctx.arc(.45, -.08, .065, 0, TAU)); fill('#fff', () => ctx.arc(.47, -.11, .02, 0, TAU));
+  ctx.restore();
+}
+
+function drawFish(f) {
+  const id = KINDS[f.k].id;
+  if (id === 'jelly') drawJelly(f);
+  else if (id === 'angler') drawAngler(f);
+  else if (id === 'squid') drawSquid(f);
+  else shape(f.x, f.y, f.r, Math.atan2(f.vy, f.vx), f.c, id, false, f);
+}
+
+function lightRadius() { return (190 + p.r * 2.4) * (1 + .35 * rank('biolum')); }
+function darkness() { return clamp((p.y - 1100) / 1300, 0, 1) * .9; }
+
+function draw() {
+  if (!W || !H || !p) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  backdrop();
+  const sx = shakeAmt ? rand(-1, 1) * shakeAmt * 9 : 0, sy = shakeAmt ? rand(-1, 1) * shakeAmt * 9 : 0;
+  ctx.save(); ctx.translate(-cam.x + sx, -cam.y + sy);
+
+  // Surface shimmer.
+  if (cam.y < 70) {
+    const wave = () => { ctx.moveTo(cam.x - 20, 0); for (let x = Math.floor(cam.x / 24) * 24 - 24; x < cam.x + W + 48; x += 24) ctx.lineTo(x, 9 + 4 * Math.sin(x * .02 + phase * 1.6)); ctx.lineTo(cam.x + W + 48, 0); };
+    fill('rgba(205,250,255,.12)', () => { wave(); ctx.closePath(); });
+    line('rgba(225,255,255,.35)', 2, () => { ctx.moveTo(cam.x - 20, 9); for (let x = Math.floor(cam.x / 24) * 24 - 24; x < cam.x + W + 48; x += 24) ctx.lineTo(x, 9 + 4 * Math.sin(x * .02 + phase * 1.6)); });
+  }
+
+  // Seabed with sea whips; some tips glow in the dark.
+  floorTips.length = 0;
+  if (FLOOR - 40 < cam.y + H + 20) {
+    fill('#163f4a', () => { const x0 = Math.floor(cam.x / 50) * 50 - 50; ctx.moveTo(x0, WORLD.h); for (let x = x0; x <= cam.x + W + 100; x += 50) ctx.lineTo(x, FLOOR - 18 * Math.sin(x * .014)); ctx.lineTo(cam.x + W + 100, WORLD.h); ctx.closePath(); });
+    for (let x = Math.max(50, Math.floor((cam.x - 100) / 85) * 85); x < cam.x + W + 100; x += 85) {
+      if (x > WORLD.w) continue;
+      const h = 45 + seeded(x) * 75, glows = seeded(x * 1.7) > .55;
+      for (let j = -1; j <= 1; j++) {
+        const tipX = x + j * 24 + Math.sin(phase * 1.4 + x + j) * 9, tipY = FLOOR - h;
+        line(glows ? '#3a6f73' : '#2f6a63', 5, () => { ctx.moveTo(x, FLOOR); ctx.bezierCurveTo(x + j * 15, FLOOR - h * .35, x - j * 10, FLOOR - h * .7, tipX, tipY); });
+        if (glows) floorTips.push(tipX, tipY);
+      }
+    }
+  }
+
+  for (const b of bubbles) {
+    if (!onScreen(b.x, b.y, 10)) continue;
+    line('#b0e0e75e', 1, () => ctx.arc(b.x + Math.sin(b.y * .03 + phase) * 4, b.y, b.r, 0, TAU));
+  }
+
+  for (const f of fish) {
+    if (!onScreen(f.x, f.y, Math.max(160, f.r * 2.2))) { f.o = null; continue; }
+    drawFish(f);
+    const edible = canEat(f), bad = isThreat(f);
+    if (bad && f.alertT > 0) {
+      ctx.font = '900 ' + Math.round(16 + f.r * .12) + 'px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#ff7b6e';
+      ctx.fillText('!', f.x, f.y - f.r - 8 + Math.sin(f.alertT * 30) * 1.5);
+    } else if (edible || bad) fill(edible ? '#b2f7c7' : '#ff9a8f', () => { ctx.moveTo(f.x - 3, f.y - f.r - 5); ctx.lineTo(f.x + 3, f.y - f.r - 5); ctx.lineTo(f.x, f.y - f.r); ctx.closePath(); });
+  }
+
+  glow(GLOW.cyan, p.x, p.y, p.r * 2.3, .14); ctx.globalAlpha = 1;   // halo so you can spot yourself
+  const blink = p.inv > 0 && Math.floor(p.inv * 12) % 2 === 0;
+  shape(p.x, p.y, p.r, p.a, p.inv > 0 ? (blink ? '#c4a3b2' : '#ab8e9b') : p.stung > 0 ? '#a896c8' : '#7ca8c1', 'player', true, p);
+
+  for (const q of parts) {
+    const a = q.life / q.max;
+    if (q.type === 'ring') { ctx.globalAlpha = a * .8; line(q.color, 3, () => ctx.arc(q.x, q.y, q.R * (1 - a * a), 0, TAU)); }
+    else if (q.type === 'bubble') { ctx.globalAlpha = a * .7; line('#d4f6ff', 1, () => ctx.arc(q.x, q.y, q.r, 0, TAU)); }
+    else { ctx.globalAlpha = a; fill(q.color, () => ctx.arc(q.x, q.y, q.r * (.5 + a * .5), 0, TAU)); }
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // Darkness of the deep, lit only around the player.
+  const dark = darkness(), px = p.x - cam.x + sx, py = p.y - cam.y + sy;
+  if (dark > .01) {
+    const R = lightRadius(), g = ctx.createRadialGradient(px, py, R * .22, px, py, R);
+    g.addColorStop(0, 'rgba(1,6,16,0)'); g.addColorStop(1, `rgba(1,6,16,${dark})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+
+  // Bioluminescence glows through the dark.
+  ctx.save(); ctx.translate(-cam.x + sx, -cam.y + sy); ctx.globalCompositeOperation = 'lighter';
+  const gk = dark / .9;
+  for (const f of fish) {
+    if (!f.o && KINDS[f.k].id !== 'jelly') continue;
+    const id = KINDS[f.k].id;
+    if (id === 'jelly' && onScreen(f.x, f.y, 80)) glow(GLOW.violet, f.x, f.y - f.r * .15, f.r * 2.1, .18 + .5 * gk);
+    else if (id === 'lantern') glow(GLOW.cyan, f.x, f.y, f.r * 3.2, .25 + .55 * gk);
+    else if (id === 'angler' && f.lure) { glow(GLOW.gold, f.lure[0], f.lure[1], 34 + f.r * .7, .35 + .65 * gk); glow(GLOW.gold, f.lure[0], f.lure[1], 7, 1); }
+    else if (gk > .25 && f.o && isThreat(f) && KINDS[f.k].predator) {
+      const [ex, ey] = id === 'squid' ? toWorld(f.o, .42, -.08) : toWorld(f.o, .68, -.12);
+      glow(GLOW.red, ex, ey, Math.max(6, f.r * .32), .7 * gk);
+    }
+  }
+  for (let i = 0; i < floorTips.length; i += 2) glow(GLOW.mint, floorTips[i], floorTips[i + 1], 14, .15 + .55 * gk);
+  ctx.restore();
+
+  // Score popups stay readable above the dark.
+  ctx.save(); ctx.translate(-cam.x + sx, -cam.y + sy);
+  ctx.font = 'bold 15px system-ui'; ctx.textAlign = 'center';
+  for (const e of pops) { ctx.globalAlpha = e.t; ctx.fillStyle = e.bad ? '#ff9a8f' : '#d0ffac'; ctx.fillText(e.txt, e.x, e.y - 12); }
+  ctx.restore(); ctx.globalAlpha = 1;
+
+  if (p.hurt > 0) {
+    const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .3, W / 2, H / 2, Math.max(W, H) * .75);
+    g.addColorStop(0, 'rgba(255,50,50,0)'); g.addColorStop(1, `rgba(255,50,50,${p.hurt})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  drawThreatArrows(px, py);
+  if (steer) { // analog stick feedback
+    ctx.globalAlpha = .22; line('#ffffff', 2, () => ctx.arc(steer.ox, steer.oy, 56, 0, TAU));
+    ctx.globalAlpha = .3; fill('#ffffff', () => ctx.arc(steer.ox + (aim?.x || 0) * 56, steer.oy + (aim?.y || 0) * 56, 15, 0, TAU));
+    ctx.globalAlpha = 1;
+  }
+  if (DEBUG) {
+    ctx.font = '11px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff';
+    ctx.fillText(`${fps.toFixed(0)} fps · ${fish.length} fish · dpr ${dpr} · y ${p.y.toFixed(0)} · r ${p.r.toFixed(1)}`, 14, H - 100);
+  }
+}
+
+// Red chevrons on the screen edge for threats closing in from off-screen.
+function drawThreatArrows(px, py) {
+  const m = 26;
+  for (const f of fish) {
+    if (!isThreat(f) || KINDS[f.k].hazard) continue;
+    const fx = f.x - cam.x, fy = f.y - cam.y;
+    if (fx > -f.r && fx < W + f.r && fy > -f.r && fy < H + f.r) continue;
+    const dd = dist(f, p); if (dd > 900) continue;
+    const ang = Math.atan2(fy - py, fx - px), cx = Math.cos(ang), cy = Math.sin(ang);
+    const tx = cx > 0 ? (W - m - px) / cx : cx < 0 ? (m - px) / cx : Infinity;
+    const ty = cy > 0 ? (H - m - py) / cy : cy < 0 ? (m - py) / cy : Infinity;
+    const t = Math.max(0, Math.min(tx, ty)), ax = px + cx * t, ay = py + cy * t, s = 7 + Math.min(8, f.r / 10);
+    ctx.save(); ctx.translate(ax, ay); ctx.rotate(ang); ctx.globalAlpha = .35 + .6 * (1 - dd / 900);
+    fill('#ff8f86', () => { ctx.moveTo(s, 0); ctx.lineTo(-s * .7, -s * .8); ctx.lineTo(-s * .3, 0); ctx.lineTo(-s * .7, s * .8); ctx.closePath(); });
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawBoost() {
+  if (!W || !H || !p) return;
+  if (!boostGeometry) {
+    const r = $('boost').getBoundingClientRect(), c = canvas.getBoundingClientRect();
+    boostGeometry = { x: r.left - c.left + r.width / 2, y: r.top - c.top + r.height / 2, rad: r.width / 2 - 2 };
+  }
+  const { x, y, rad } = boostGeometry, ready = p.food > 8;
+  ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.globalAlpha = ready ? 1 : .45;
+  fill(p.boostOn ? '#247f9b' : '#16435b', () => ctx.arc(x, y, rad, 0, TAU));
+  line(p.boostOn ? '#b3f4e9' : '#78aab9', 2, () => ctx.arc(x, y, rad, 0, TAU));
+  ctx.font = '800 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#eefaff';
+  ctx.fillText('BOOST', x, y);
+  ctx.restore();
+}
+
+// ---------- 8. HUD, menus & evolution ----------
+function stageName(r) { return r < 32 ? 'JUVENILE' : r < 48 ? 'HUNTER' : r < 68 ? 'APEX' : r < 100 ? 'LEVIATHAN' : 'ABYSSAL TITAN'; }
+function fmtTime(s) { s = Math.floor(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+function announce(t) { $('toast').textContent = t; toastTimer = 1.45; }
+
+function updateHud() {
+  $('hpBar').style.width = p.hp + '%'; $('foodBar').style.width = p.food + '%';
+  $('hpText').textContent = Math.ceil(p.hp); $('foodText').textContent = Math.ceil(p.food);
+  $('hpWrap').classList.toggle('low', p.hp < 30); $('foodWrap').classList.toggle('low', p.food < 25);
+  $('score').textContent = p.score.toLocaleString();
+  $('growth').textContent = stageName(p.r) + ' · ' + (p.r / BASE_R).toFixed(1) + ' m';
+  const z = zoneAt(p.y);
+  $('depth').textContent = ZONES[z].name + ' · ' + Math.round(p.y * METERS_PER_PX) + ' m' + (z ? ' · ×' + ZONES[z].mult : '');
+  $('combo').textContent = p.combo >= 2 ? 'COMBO ' + p.combo + (p.combo >= 4 ? ' · FRENZY ×' + (1 + Math.min(3, Math.floor(p.combo / 4))) : '') : '';
+  $('lvl').textContent = 'LEVEL ' + p.level;
+  $('xpText').textContent = Math.floor(p.xp) + ' / ' + p.nextXP + ' XP';
+  $('xpBar').style.width = 100 * clamp(p.xp / p.nextXP, 0, 1) + '%';
+  $('mutations').textContent = Object.entries(p.mods).map(([id, n]) => MUT.find(m => m.id === id).name + (n > 1 ? ' ×' + n : '')).join(' · ');
+}
+
+function startDive() {
+  Sound.init(); Sound.suspend(false);
+  reset(); active = true; paused = false; prev = performance.now();
+  $('veil').classList.add('hidden'); $('pauseVeil').classList.add('hidden');
+  $('hint').classList.remove('fade'); hintTimer = 10;
+  document.activeElement?.blur?.();
+}
+
+function end(why) {
+  active = false; paused = false; evolving = false; clearInput();
+  const newBest = p.score > best;
+  if (newBest) { best = p.score; savePref(PREF.best, best); }
+  $('eyebrow').textContent = newBest && p.score > 0 ? 'NEW PERSONAL BEST' : 'OCEAN SURVIVAL / ' + VERSION;
+  $('headline').innerHTML = 'DIVE<br>COMPLETE';
+  $('desc').textContent = why;
+  const rows = [
+    ['Score', p.score.toLocaleString()], ['Best', best.toLocaleString()],
+    ['Prey eaten', p.eaten], ['Level', p.level],
+    ['Deepest', Math.round(p.maxDepth * METERS_PER_PX) + ' m'], ['Survived', fmtTime(p.time)],
+    ['Final size', stageName(p.r).toLowerCase() + ', ' + (p.r / BASE_R).toFixed(1) + ' m'],
+    ['Biggest catch', p.biggest === null ? 'nothing yet' : KINDS[p.biggest].name],
+  ];
+  const sum = $('summary'); sum.replaceChildren();
+  rows.forEach(([k, v], i) => {
+    const row = document.createElement('div'), a = document.createElement('span'), b = document.createElement('b');
+    a.textContent = k; b.textContent = v; row.append(a, b); if (i >= 6) row.className = 'wide'; sum.append(row);
+  });
+  sum.classList.remove('hidden');
+  $('start').textContent = 'Dive again';
+  $('bestLine').textContent = '';
+  $('evolution').classList.add('hidden'); $('pauseVeil').classList.add('hidden');
+  $('veil').classList.remove('hidden');
+  Sound.suspend(false); Sound.death();
+}
+
+function setPaused(on) {
+  if (on) {
+    if (!active || paused) return;
+    paused = true; active = false; clearInput();
+    $('pauseInfo').textContent = 'Score ' + p.score.toLocaleString() + ' · ' + Math.round(p.y * METERS_PER_PX) + ' m · ' + fmtTime(p.time);
+    $('pauseVeil').classList.remove('hidden');
+    Sound.suspend(true);
+  } else {
+    if (!paused) return;
+    paused = false; active = true; prev = performance.now();
+    $('pauseVeil').classList.add('hidden');
+    Sound.suspend(false);
+    document.activeElement?.blur?.();
+  }
+}
+
+function xpFor(level) { const n = level - 1; return Math.round(TUNE.xpBase + TUNE.xpLinear * n + TUNE.xpSquare * n * n); }
+
+function openEvolution() {
+  if (evolving || !active) return;
+  const pool = MUT.filter(m => rank(m.id) < m.max && (!m.when || m.when()));
+  p.xp -= p.nextXP; p.level++; p.nextXP = xpFor(p.level);
+  Sound.level();
+  addPart({ x: p.x, y: p.y, life: .6, R: p.r * 3.5, type: 'ring', color: '#8fc9ff' });
+  if (!pool.length) { p.hp = Math.min(100, p.hp + 30); announce('FULLY EVOLVED · +30 HP'); updateHud(); return; }
+  active = false; evolving = true; clearInput(); p.boostOn = false; evoOpenedAt = performance.now();
+  offers = [];
+  while (pool.length && offers.length < 3) offers.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  $('evoTitle').textContent = 'Level ' + p.level + ' · Choose a mutation';
+  const list = $('choices'); list.replaceChildren();
+  offers.forEach((m, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.dataset.mutation = m.id;
+    const title = document.createElement('b'), desc = document.createElement('span'), tier = document.createElement('small'), key = document.createElement('em');
+    title.textContent = m.name; desc.textContent = m.desc; tier.textContent = 'Rank ' + (rank(m.id) + 1) + ' / ' + m.max;
+    key.className = 'key'; key.textContent = i + 1;
+    b.append(title, desc, tier, key);
+    b.addEventListener('click', () => chooseMutation(m.id));
+    list.append(b);
+  });
+  $('evolution').classList.remove('hidden');
+  updateHud();
+}
+
+function chooseMutation(id) {
+  if (!evolving || !offers.some(m => m.id === id)) return;
+  if (performance.now() - evoOpenedAt < 350) return; // ignore taps that were meant for steering
+  p.mods[id] = rank(id) + 1; offers = []; evolving = false;
+  $('evolution').classList.add('hidden'); clearInput();
+  active = true; prev = performance.now();
+  updateHud(); announce(MUT.find(m => m.id === id).name.toUpperCase());
+  document.activeElement?.blur?.();
+  if (p.xp >= p.nextXP) openEvolution();
+}
+
+function toggleMute() {
+  const m = Sound.toggle();
+  $('muteBtn').classList.toggle('off', m);
+  $('muteBtn').setAttribute('aria-pressed', String(m));
+}
+
+// ---------- 9. Input ----------
+function beginSteer(id, x, y) { if (!active || steer) return; steer = { id, ox: x, oy: y }; aim = { x: 0, y: 0 }; }
+function moveSteer(id, x, y) {
+  if (!steer || steer.id !== id) return;
+  const dx = x - steer.ox, dy = y - steer.oy, m = Math.hypot(dx, dy), v = clamp((m - 8) / 48, 0, 1);
+  aim = { x: m ? dx / m * v : 0, y: m ? dy / m * v : 0 };
+}
+function stopSteer(id) { if (steer?.id === id) { steer = null; aim = null; } }
+function clearInput() { steer = null; aim = null; boostTouch = null; mouseSteer = false; mouseBoost = false; boosting = false; keys = {}; }
+
+const opts = { passive: false };
+canvas.addEventListener('touchstart', e => { e.preventDefault(); for (const t of e.changedTouches) beginSteer(t.identifier, t.clientX, t.clientY); }, opts);
+canvas.addEventListener('touchmove', e => { e.preventDefault(); for (const t of e.changedTouches) moveSteer(t.identifier, t.clientX, t.clientY); }, opts);
+for (const name of ['touchend', 'touchcancel']) canvas.addEventListener(name, e => { e.preventDefault(); for (const t of e.changedTouches) stopSteer(t.identifier); }, opts);
+
+const boostBtn = $('boost');
+boostBtn.addEventListener('touchmove', e => e.preventDefault(), opts);
+boostBtn.addEventListener('contextmenu', e => e.preventDefault());
+boostBtn.addEventListener('touchstart', e => { e.preventDefault(); if (boostTouch === null && active) { boostTouch = e.changedTouches[0].identifier; boosting = true; } }, opts);
+for (const name of ['touchend', 'touchcancel']) boostBtn.addEventListener(name, e => { e.preventDefault(); for (const t of e.changedTouches) if (t.identifier === boostTouch) { boostTouch = null; boosting = false; } }, opts);
+
+canvas.addEventListener('mousedown', e => { if (e.button === 0) { mouseSteer = true; beginSteer('mouse', e.clientX, e.clientY); } });
+window.addEventListener('mousemove', e => { if (mouseSteer) moveSteer('mouse', e.clientX, e.clientY); });
+boostBtn.addEventListener('mousedown', () => { if (active) { mouseBoost = true; boosting = true; } });
+window.addEventListener('mouseup', () => { mouseSteer = false; stopSteer('mouse'); if (mouseBoost) { mouseBoost = false; boosting = false; } });
+
+const MOVE_KEYS = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '];
+window.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (evolving && /^[1-3]$/.test(k)) { const m = offers[+k - 1]; if (m) chooseMutation(m.id); e.preventDefault(); return; }
+  if (k === 'p' || k === 'escape') { if (paused) setPaused(false); else setPaused(true); e.preventDefault(); return; }
+  if (k === 'm' && !e.repeat) { toggleMute(); return; }
+  if (k === 'enter' && document.activeElement?.tagName !== 'BUTTON') {
+    if (paused) setPaused(false);
+    else if (!active && !evolving) startDive();
+    e.preventDefault(); return;
+  }
+  if (MOVE_KEYS.includes(k)) { e.preventDefault(); if (active) keys[k] = true; }
+});
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+window.addEventListener('blur', () => { clearInput(); setPaused(true); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { clearInput(); setPaused(true); } });
+$('start').addEventListener('click', startDive);
+$('resume').addEventListener('click', () => setPaused(false));
+$('quit').addEventListener('click', () => { if (paused) { paused = false; end('You surfaced early'); } });
+$('pauseBtn').addEventListener('click', () => setPaused(true));
+$('muteBtn').addEventListener('click', toggleMute);
+
+// ---------- 10. Main loop & boot ----------
+function frame(t) {
+  const dt = Math.min(.05, Math.max(0, (t - (prev || t)) / 1000)); prev = t;
+  if (!paused) phase += dt;
+  if (dt > 0) fps += (1 / dt - fps) * .05;
+  // If the device can't keep up at high resolution, drop to 1x pixels once.
+  if (active && dprCap > 1) { slowTime = dt > .026 ? slowTime + dt : Math.max(0, slowTime - dt * .5); if (slowTime > 2.5) { dprCap = 1; resize(); } }
+  if (active) update(dt);
+  if (p && !evolving && !paused) {
+    const target = 5.5 + 3.5 * clamp(Math.hypot(p.vx, p.vy) / 240, 0, 1) + 1.2 * p.boostMix;
+    p.swimRate += (target - p.swimRate) * ease(5, dt);
+    p.swimPhase = (p.swimPhase + dt * p.swimRate) % TAU;
+  }
+  draw(); drawBoost();
+  requestAnimationFrame(frame);
+}
+
+window.addEventListener('resize', resize);
+new ResizeObserver(resize).observe($('game'));
+resize();
+$('build').textContent = 'BUILD ' + VERSION + ' · SCORE';
+$('eyebrow').textContent = 'OCEAN SURVIVAL / ' + VERSION;
+$('hint').textContent = COARSE
+  ? 'Drag anywhere to swim; release to glide. Hold BOOST to sprint.'
+  : 'WASD / arrows to swim · Space to boost · or drag with the mouse · P pause · M sound';
+if (best) $('bestLine').textContent = 'Best score ' + best.toLocaleString();
+if (Sound.muted) { $('muteBtn').classList.add('off'); $('muteBtn').setAttribute('aria-pressed', 'true'); }
+reset();
+requestAnimationFrame(frame);
+
+if (DEBUG) window.__aa = {
+  get p() { return p; }, get fish() { return fish; }, KINDS, ZONES,
+  get state() { return { active, paused, evolving, offers: offers.map(m => m.id), dpr, fps }; },
+  start: startDive,
+  step(n = 60, dt = 1 / 60) { for (let i = 0; i < n && active; i++) { phase += dt; update(dt); } return { active, evolving }; },
+  setAim(x, y) { aim = (x || y) ? { x, y } : null; },
+  setBoost(on) { boosting = !!on; },
+  choose(i = 0) { const m = offers[i]; if (m) { evoOpenedAt = -1e9; chooseMutation(m.id); } },
+  spawn(id, x, y) { return spawnAt(KIND[id], x, y); },
+  draw() { draw(); drawBoost(); },
+};
+</script>
+</body>
+</html>
